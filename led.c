@@ -8,7 +8,7 @@ int main(void)
 	//结构体成员
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;	//推挽输出类型，高低电平均可有效驱动
 //	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD;	//开漏输出模式，高阻态，只有低电平有驱动能力
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);	//完成初始化
 	
