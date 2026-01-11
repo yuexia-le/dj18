@@ -1,25 +1,24 @@
-name: Docker CI
+name: Docker CI/CD
 
 on:
   push:
-    branches: [ "main" ]  # 只有推送到 main 才会触发镜像构建
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]  # 提交针对 main 的合并请求时，可以只跑测试不推镜像
+    branches: [ "main" ]
 
 jobs:
-  build-and-push:
-    # 只有当分支是 main 时，才执行推送镜像的步骤
+  build-and-deploy:
+    # 只有合并到 main 才会真正执行以下所有步骤
     if: github.ref == 'refs/heads/main' 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # 使用你 nohup 运行的本地 Runner
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-        # 使用官方 login-action 解决权限传递问题
       - name: Login to Aliyun Registry
         uses: docker/login-action@v3
         with:
@@ -32,12 +31,25 @@ jobs:
         with:
           context: .
           push: true
-          # 增加这一行，有时可以缓解某些 Buildx 版本的连接策略问题
           provenance: false
           tags: |
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
-          # 显式使用缓存提高构建速度
           cache-from: type=gha
           cache-to: type=inline
 
+      - name: Deploy Locally
+        run: |
+          # 停止并删除旧容器
+          docker rm -f vocab_container || true
+          
+          # 启动新容器并注入 API Key
+          docker run -d \
+            --name vocab_container \
+            --network="host" \
+            --restart always \
+            -e SILICONFLOW_API_KEY="${{ secrets.SILICONFLOW_API_KEY }}" \
+            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+          
+          # 清理过期的旧镜像
+          docker image prune -f
