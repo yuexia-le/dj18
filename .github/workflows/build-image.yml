@@ -1,0 +1,31 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [ "main" ]  # 只有推送到 main 才会触发镜像构建
+  pull_request:
+    branches: [ "main" ]  # 提交针对 main 的合并请求时，可以只跑测试不推镜像
+
+jobs:
+  build-and-push:
+    # 只有当分支是 main 时，才执行推送镜像的步骤
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Aliyun Registry
+        # 使用你之前在 GitHub Secrets 设置的变量
+        run: |
+          echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com -u "${{ secrets.ALIYUN_REGISTRY_USER }}" --password-stdin
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # 动态打标签：latest 永远指向最新版，也可以加上提交 ID
+          tags: |
+            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
