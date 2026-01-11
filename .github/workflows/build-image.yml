@@ -8,42 +8,28 @@ on:
 
 jobs:
   build-and-deploy:
-    # 只有合并到 main 才会真正执行以下所有步骤
-    if: github.ref == 'refs/heads/main' 
-    runs-on: self-hosted  # 使用你 nohup 运行的本地 Runner
-    
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4  # 这个通常比较小，容易下载成功
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Aliyun Registry
-        uses: docker/login-action@v3
-        with:
-          registry: crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
-          username: ${{ secrets.ALIYUN_REGISTRY_USER }}
-          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          provenance: false
-          tags: |
-            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
-            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=inline
-
-      - name: Deploy Locally
+      - name: Local Docker Build and Deploy
         run: |
-          # 停止并删除旧容器
+          # 1. 登录阿里云 (使用 Secrets)
+          echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password-stdin crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
+          
+          # 2. 直接使用本地 Docker 构建镜像
+          # 这样就不需要下载 setup-buildx-action 插件了
+          docker build -t crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest .
+          
+          # 3. 推送到阿里云镜像仓库（作为备份）
+          docker push crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+          
+          # 4. 停止并删除旧容器
           docker rm -f vocab_container || true
           
-          # 启动新容器并注入 API Key
+          # 5. 启动新容器
           docker run -d \
             --name vocab_container \
             --network="host" \
@@ -51,5 +37,5 @@ jobs:
             -e SILICONFLOW_API_KEY="${{ secrets.SILICONFLOW_API_KEY }}" \
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
           
-          # 清理过期的旧镜像
+          # 6. 清理无用镜像
           docker image prune -f
