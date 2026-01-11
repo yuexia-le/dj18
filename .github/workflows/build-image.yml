@@ -32,7 +32,8 @@ jobs:
         with:
           context: .
           push: true
-
+          # 增加这一行，有时可以缓解某些 Buildx 版本的连接策略问题
+          provenance: false
           tags: |
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
