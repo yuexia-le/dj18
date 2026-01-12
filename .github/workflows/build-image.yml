@@ -7,35 +7,64 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
-    if: github.ref == 'refs/heads/main'
-    runs-on: self-hosted
+  # 第一阶段：云端构建 (CI) - 使用 GitHub 托管服务器
+  build:
+    # 保留你的判断：只有合入 main 才会执行（或者 PR 针对 main 触发）
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest  # 使用 GitHub-hosted 节省本地资源
+    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # 这个通常比较小，容易下载成功
+        uses: actions/checkout@v4
 
-      - name: Local Docker Build and Deploy
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Aliyun Registry
+        uses: docker/login-action@v3
+        with:
+          registry: crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
+          username: ${{ secrets.ALIYUN_REGISTRY_USER }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=inline
+
+  # 第二阶段：本地部署 (CD) - 使用客户虚拟机 Runner
+  deploy:
+    needs: build  # 只有 build 成功后才会执行部署
+    runs-on: self-hosted  # 在你的 Ubuntu 虚拟机上执行命令
+    
+    steps:
+      - name: Deploy Locally
         run: |
-          # 1. 登录阿里云 (使用 Secrets)
-          echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password-stdin crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
+          # 1. 登录阿里云（确保本地能拉取最新镜像）
+          docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password=${{ secrets.ALIYUN_REGISTRY_PASSWORD }} crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
           
-          # 2. 直接使用本地 Docker 构建镜像
-          # 这样就不需要下载 setup-buildx-action 插件了
-          docker build -t crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest .
+          # 2. 拉取最新镜像
+          docker pull crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
           
-          # 3. 推送到阿里云镜像仓库（作为备份）
-          docker push crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
-          
-          # 4. 停止并删除旧容器
+          # 3. 停止并删除旧业务容器
           docker rm -f vocab_container || true
           
-          # 5. 启动新容器
+          # 4. 启动新容器（使用内网 link 模式连接数据库）
           docker run -d \
             --name vocab_container \
-            --network="host" \
+            --link vocab_master:db_host \
             --restart always \
+            -p 5000:5000 \
             -e SILICONFLOW_API_KEY="${{ secrets.SILICONFLOW_API_KEY }}" \
+            -e DB_URL="mysql+pymysql://root:root@db_host:3306/vocab_master?charset=utf8mb4" \
             crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
           
-          # 6. 清理无用镜像
+          # 5. 清理碎片
           docker image prune -f
