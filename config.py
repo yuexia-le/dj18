@@ -4,7 +4,7 @@ import os
 class Config:
     # 请根据实际情况修改数据库连接信息
     # 格式: mysql+pymysql://用户名:密码@主机/数据库名
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:root@localhost/vocab_master'
+    SQLALCHEMY_DATABASE_URI = os.getenv('DB_URL', 'mysql+pymysql://root:root@db_host/vocab_master')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # AI 配置 (这里以兼容 OpenAI 格式的 API 为例，如 DeepSeek 或 ChatGPT)
