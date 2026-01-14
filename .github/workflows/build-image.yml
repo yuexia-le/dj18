@@ -1,9 +1,7 @@
-name: Docker CI/CD
+name: K8s-Edition CI/CD
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
 
 jobs:
@@ -41,30 +39,32 @@ jobs:
 
   # 第二阶段：本地部署 (CD) - 使用客户虚拟机 Runner
   deploy:
-    needs: build  # 只有 build 成功后才会执行部署
-    runs-on: self-hosted  # 在你的 Ubuntu 虚拟机上执行命令
-    
+    needs: build
+    runs-on: self-hosted 
     steps:
-      - name: Deploy Locally
+      # 1. 注入钥匙 (核心安全步骤)
+      - name: Configure Kubeconfig
         run: |
-          # 1. 登录阿里云（确保本地能拉取最新镜像）
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      # 2. 拉取镜像并注入 Kind (关联本地环境)
+      - name: Load Image to Kind
+        run: |
           docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password=${{ secrets.ALIYUN_REGISTRY_PASSWORD }} crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
-          
-          # 2. 拉取最新镜像
           docker pull crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+          kind load docker-image crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+
+      # 3. 滚动更新 K8s Deployment (模拟真实发布)
+      - name: Update K8s Deployment
+        run: |
+          # 强制更新镜像，K8s 会自动启动新 Pod 并销毁旧 Pod，实现不停机更新
+          kubectl set image deployment/vocab-app vocab-app=crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest -n vocab-pro
           
-          # 3. 停止并删除旧业务容器
-          docker rm -f vocab_container || true
-          
-          # 4. 启动新容器（使用内网 link 模式连接数据库）
-          docker run -d \
-            --name vocab_container \
-            --link vocab_master:db_host \
-            --restart always \
-            -p 5000:5000 \
-            -e SILICONFLOW_API_KEY="${{ secrets.SILICONFLOW_API_KEY }}" \
-            -e DB_URL="mysql+pymysql://root:root@db_host:3306/vocab_master?charset=utf8mb4" \
-            crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
-          
-          # 5. 清理碎片
-          docker image prune -f
+          # 等待滚动更新完成，如果新版本崩溃，此命令会报错并标记部署失败
+          kubectl rollout status deployment/vocab-app -n vocab-pro
+
+      # 4. 清理宿主机冗余镜像
+      - name: Cleanup
+        run: docker image prune -f
