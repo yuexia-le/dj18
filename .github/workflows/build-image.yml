@@ -53,8 +53,10 @@ jobs:
       - name: Load Image to Kind
         run: |
           docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password=${{ secrets.ALIYUN_REGISTRY_PASSWORD }} crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
-          docker pull crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
-          kind load docker-image crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:latest
+          # 先拉取刚才 CI 阶段刚打好 SHA 标签的镜像
+          docker pull crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
+          # 将带 SHA 标签的镜像加载到 Kind
+          kind load docker-image crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }} --name kind
 
       # 3. 滚动更新 K8s Deployment (模拟真实发布)
       - name: Update K8s Deployment
