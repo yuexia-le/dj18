@@ -5,11 +5,10 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # 第一阶段：云端构建 (CI) - 使用 GitHub 托管服务器
+  # 第一阶段：云端构建 (CI)
   build:
-    # 保留你的判断：只有合入 main 才会执行（或者 PR 针对 main 触发）
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest  # 使用 GitHub-hosted 节省本地资源
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
@@ -37,37 +36,39 @@ jobs:
           cache-from: type=gha
           cache-to: type=inline
 
-  # 第二阶段：本地部署 (CD) - 使用客户虚拟机 Runner
+  # 第二阶段：本地部署 (CD)
   deploy:
     needs: build
     runs-on: self-hosted 
     steps:
-      # 1. 注入钥匙 (核心安全步骤)
+      # 1. 注入钥匙
       - name: Configure Kubeconfig
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
-      # 2. 拉取镜像并注入 Kind (关联本地环境)
+      # 2. 拉取镜像并注入 Kind
       - name: Load Image to Kind
         run: |
           docker login --username=${{ secrets.ALIYUN_REGISTRY_USER }} --password=${{ secrets.ALIYUN_REGISTRY_PASSWORD }} crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com
-          # 先拉取刚才 CI 阶段刚打好 SHA 标签的镜像
           docker pull crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }}
-          # 将带 SHA 标签的镜像加载到 Kind
           kind load docker-image crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }} --name kind
 
-      # 3. 滚动更新 K8s Deployment (模拟真实发布)
+      # 3. 确保 MySQL 镜像存在（已修正缩进）
+      - name: Ensure Base Images in Kind
+        run: |
+          if ! docker exec kind-control-plane crictl inspecti mysql:8.0 >/dev/null 2>&1; then
+            docker pull mysql:8.0
+            kind load docker-image mysql:8.0 --name kind
+          fi
+
+      # 4. 滚动更新 K8s Deployment
       - name: Update K8s Deployment
         run: |
-          # 1. 只需要告诉 K8s 更新到哪一个 SHA 标签的镜像即可
-          # K8s 会自动拿着我们第一步配置的 secret 去阿里云拉取这个新镜像
           kubectl set image deployment/vocab-app vocab-app=crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }} -n vocab-pro
-          
-          # 2. 等待滚动更新
           kubectl rollout status deployment/vocab-app -n vocab-pro
 
-      # 4. 清理宿主机冗余镜像
+      # 5. 清理宿主机冗余镜像
       - name: Cleanup
         run: docker image prune -f
