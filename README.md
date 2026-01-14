@@ -1,20 +1,17 @@
-# Vocab-Master 生产级部署方案
+# Vocab-Master K8s Edition
 
-本项目不仅是一个 Flask 词汇管理应用，更是一套完整的容器化自动运维实验场。
+这是一个基于云原生架构的词汇学习系统交付方案。
 
-## 🏗 架构说明
-- **前端/后端**: Flask + Python 3.12
-- **数据库**: MySQL 8.0 (持久化挂载至宿主机)
-- **部署引擎**: Docker + Docker Compose
-- **自动化**: GitHub Actions (CI/CD)
+## ✨ 核心特性
+* **自动化交付**：集成 GitHub Actions，实现从源码到 K8s 运行环境的端到端自动化。
+* **版本追踪**：镜像标签与 Git Commit SHA 绑定，支持 `kubectl rollout history` 追溯部署原因。
+* **高可用架构**：2 副本 Deployment 部署，配合 K8s 调度机制确保服务高可用。
+* **环境自愈**：利用 K8s 探针自动检测并重启异常容器，保障业务连续性。
 
-## 🚀 部署特性
-1. **全自动 CI**: 代码 Push 后自动触发镜像构建并同步至阿里云镜像站。
-2. **私有化 CD**: 利用 Self-hosted Runner 在内网 Ubuntu 24.04 环境实现安全重启。
-3. **高安全性**: 敏感 API Key 通过 GitHub Secrets 动态注入，不泄露在代码库中。
+## 🛠 部署架构图
 
-## 🛠 本地快速启动
-```bash
-docker login ...
-docker pull ...
-docker run -d --name vocab_container ...
+
+## 📋 快速开始
+1. 在 K8s 中创建秘钥：`kubectl create secret docker-registry aliyun-registry-secret ...`
+2. 配置 GitHub Secrets：`KUBE_CONFIG`, `ALIYUN_REGISTRY_USER` 等。
+3. 推送代码至 main 分支，观察 GitHub Actions 流水线自动完成部署。
