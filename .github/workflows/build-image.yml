@@ -61,13 +61,11 @@ jobs:
       # 3. 滚动更新 K8s Deployment (模拟真实发布)
       - name: Update K8s Deployment
         run: |
-          # 1. 强制设置镜像为带 SHA 标签的版本
+          # 1. 只需要告诉 K8s 更新到哪一个 SHA 标签的镜像即可
+          # K8s 会自动拿着我们第一步配置的 secret 去阿里云拉取这个新镜像
           kubectl set image deployment/vocab-app vocab-app=crpi-8tpi8vcb6euhian5.cn-shenzhen.personal.cr.aliyuncs.com/dsl_taiji/vocab_master:${{ github.sha }} -n vocab-pro
           
-          # 2. 【核心修复】强制修改拉取策略为 IfNotPresent，让它只找刚才 kind load 进去的本地货
-          kubectl patch deployment vocab-app -n vocab-pro -p '{"spec":{"template":{"spec":{"containers":[{"name":"vocab-app","imagePullPolicy":"IfNotPresent"}]}}}}'
-          
-          # 3. 等待滚动更新完成
+          # 2. 等待滚动更新
           kubectl rollout status deployment/vocab-app -n vocab-pro
 
       # 4. 清理宿主机冗余镜像
